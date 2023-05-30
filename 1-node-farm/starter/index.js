@@ -1,6 +1,10 @@
-const fs = require('fs');
-const http = require('http');
-const url = require('url');
+const fs = require("fs");
+const http = require("http");
+const url = require("url");
+
+const slugify = require("slugify"); //creates a slug, ie, a string "fresh-avocados" from "fresh avocados"
+
+const replaceTemplate = require("./modules/replaceTemplate");
 
 ///////////////////////////////////
 ///FILES
@@ -29,33 +33,68 @@ const url = require('url');
 ///////////////////////////////////
 ///SERVER
 
-const server = http.createServer((req, res) => {
-  console.log(req.url);
+const data = fs.readFileSync(`${__dirname}/dev-data/data.json`, "utf-8"); //__dirname is the same as ./ but ./ will always point to the directory where the script is run from, while __dirname will point to the directory where the script is actually located at.
+const dataObj = JSON.parse(data); //parsed data into a JS object, to be used programmatically by JS in our code
 
-  const pathName = req.url;
-  if (pathName === '/' || pathName === '/overview') {
-    res.end('This is the OVERVIEW');
-  } else if (pathName === '/product') {
-    res.end('This is the PRODUCT');
-  } else if (pathName === '/api') {
-    //__dirname is the same as ./ but ./ will always point to the directory where the script is run from, while __dirname will point to the directory where the script is actually located at.
-    fs.readFile(`${__dirname}/dev-data/data.json`, 'utf-8', (err, data) => {
-      const productData = JSON.parse(data);
-      console.log(productData); //on console and for using the data programmatically, we should parse the JSON string to a JS object
-      res.writeHead(200, {
-        'Content-Type': 'application/json',
-      }); //writing a header to inform the browser that the response is in JSON format (not absolutely necessary in this case)
-      res.end(data); //to send the data to be displayed on the browser directly, we should use the original JSON string
-    });
-  } else {
-    res.writeHead(404, {
-      'Content-type': 'text/html',
-      'my-own-header': 'hello-world',
-    });
-    res.end('<h1>Page not found!</h1>');
-  }
+const slugs = dataObj.map((el) => slugify(el.productName, { lower: true }));
+console.log(slugs);
+
+const tempOverview = fs.readFileSync(
+    `${__dirname}/templates/template-overview.html`,
+    "utf-8"
+);
+const tempCard = fs.readFileSync(
+    `${__dirname}/templates/template-card.html`,
+    "utf-8"
+);
+const tempProduct = fs.readFileSync(
+    `${__dirname}/templates/template-product.html`,
+    "utf-8"
+);
+
+const server = http.createServer((req, res) => {
+    const { query, pathname } = url.parse(req.url, true); //parse the req.url using the parse method that belongs to the url package
+
+    //Overview page
+    if (pathname === "/" || pathname === "/overview") {
+        res.writeHead(200, {
+            "Content-type": "text/html",
+        });
+
+        const cardsHtml = dataObj
+            .map((el) => replaceTemplate(tempCard, el))
+            .join("");
+        const output = tempOverview.replace("{%PRODUCT_CARDS%}", cardsHtml);
+
+        res.end(output);
+
+        //Product page
+    } else if (pathname === "/product") {
+        res.writeHead(200, {
+            "Content-type": "text/html",
+        });
+        const product = dataObj[query.id];
+        const output = replaceTemplate(tempProduct, product);
+
+        res.end(output);
+
+        //API
+    } else if (pathname === "/api") {
+        res.writeHead(200, {
+            "Content-Type": "application/json",
+        }); //writing a header to inform the browser that the response is in JSON format (not absolutely necessary in this case)
+        res.end(data); //to send the data to be displayed on the browser directly, we should use the original JSON string
+
+        //Not found
+    } else {
+        res.writeHead(404, {
+            "Content-type": "text/html",
+            "my-own-header": "hello-world",
+        });
+        res.end("<h1>Page not found!</h1>");
+    }
 });
 
-server.listen(8000, '127.0.0.1', () => {
-  console.log('Listening to requests on port 8000');
+server.listen(8000, "127.0.0.1", () => {
+    console.log("Listening to requests on port 8000");
 });
